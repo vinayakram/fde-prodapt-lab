@@ -14,7 +14,9 @@ function App() {
 
   useEffect(() => {
     const company = urlParams.get("company")
-    // @ts-ignore
+    if (!company) {
+      return
+    }
     fetchCompanyJobBoard(company)
   }, [])
 
@@ -23,7 +25,7 @@ function App() {
       {jobBoard.map((job: any) => 
         <div>
           <h2>{job.title}</h2>
-          <p>{job.jobDescription}</p>
+          <p>{job.description}</p>
         </div>
 )}
     </>
