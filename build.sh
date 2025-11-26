@@ -8,5 +8,4 @@ alembic upgrade head
 # Frontend
 cd frontend 
 npm install 
-npx shadcn-ui@latest add --all
 npm run build
