@@ -5,11 +5,13 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy import text
+from ai import evaluate_resume_with_ai
 from auth import AdminAuthzMiddleware, AdminSessionMiddleware, authenticate_admin, delete_admin_session
+from converter import extract_text_from_pdf_bytes
 from db import get_db_session
 from emailer import send_email
 from file_storage import upload_file
-from models import JobApplication, JobBoard, JobPost
+from models import JobApplication, JobApplicationAIEvaluation, JobBoard, JobPost
 from config import settings
 
 app = FastAPI()
@@ -38,23 +40,9 @@ async def api_job_boards():
        jobBoards = session.query(JobBoard).all()
        return jobBoards
     
-
-
-# from typing import Annotated
-# @app.post("/api/job-boards")
-# async def api_create_new_job_board(slug: Annotated[str, Form()]):
-#    return {"slug": slug}
-
-
-
 class JobBoardForm(BaseModel):
    slug : str = Field(..., min_length=2, max_length=20)
    logo: UploadFile = File(...)
-
-# @app.post("/api/job-boards")
-# async def api_create_new_job_board(job_board_form: Annotated[JobBoardForm, Form()]):
-#    return {"slug": job_board_form.slug, \
-#            "file": job_board_form.logo.filename}
 
 @app.post("/api/job-boards")
 async def api_create_new_job_board(job_board_form: Annotated[JobBoardForm, Form()]):
@@ -160,15 +148,26 @@ class JobApplicationForm(BaseModel):
    job_post_id : int
    resume: UploadFile = File(...)
 
+def evaluate_resume(resume_content, job_post_description, job_application_id):
+   resume_raw_text = extract_text_from_pdf_bytes(resume_content)
+   ai_evaluation = evaluate_resume_with_ai(resume_raw_text, job_post_description)
+   with get_db_session() as session:
+      evaluation = JobApplicationAIEvaluation(
+         job_application_id = job_application_id,
+         overall_score = ai_evaluation["overall_score"],
+         evaluation = ai_evaluation
+      )
+      session.add(evaluation)
+      session.commit()
+
 @app.post("/api/job-applications")
 async def api_create_new_job_application(job_application_form: Annotated[JobApplicationForm, Form()], background_tasks: BackgroundTasks):
    with get_db_session() as session:
       jobPost = session.get(JobPost, job_application_form.job_post_id)
       if not jobPost or not jobPost.is_open:
          raise HTTPException(status_code=400)
-   resume_contents = await job_application_form.resume.read()
-   file_url = upload_file("resumes", job_application_form.resume.filename, resume_contents, job_application_form.resume.content_type)
-   with get_db_session() as session:
+      resume_content = await job_application_form.resume.read()
+      file_url = upload_file("resumes", job_application_form.resume.filename, resume_content, job_application_form.resume.content_type)
       new_job_application = JobApplication(
          first_name=job_application_form.first_name, 
          last_name=job_application_form.last_name, 
@@ -178,7 +177,11 @@ async def api_create_new_job_application(job_application_form: Annotated[JobAppl
       session.add(new_job_application)
       session.commit()
       session.refresh(new_job_application)
-      background_tasks.add_task(send_email, new_job_application.email, "Acknowledgement", "We have received your job application")
+      background_tasks.add_task(send_email, 
+                              new_job_application.email, 
+                              "Acknowledgement", 
+                              "We have received your job application")
+      background_tasks.add_task(evaluate_resume, resume_content, jobPost.description, new_job_application.id)
       return new_job_application
   
 app.mount("/assets", StaticFiles(directory="frontend/build/client/assets"))

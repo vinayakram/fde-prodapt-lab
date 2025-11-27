@@ -1,5 +1,3 @@
-// @ts-nocheck
-
 import { userContext } from "./context"
 
 export async function authMiddleware({ context } , next ) { 

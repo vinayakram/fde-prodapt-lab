@@ -14,3 +14,5 @@ testcontainers[postgres]==4.13.3 # PyTest Dependencies
 pytest==9.0.1 # Testing Tool
 
 httpx==0.28.1 # HTTP Client
+openai==2.8.1 # LLM
+PyPDF2==3.0.1 # PDF to Text
