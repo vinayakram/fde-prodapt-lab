@@ -8,7 +8,7 @@ from sqlalchemy import text
 from ai import evaluate_resume_with_ai
 from auth import AdminAuthzMiddleware, AdminSessionMiddleware, authenticate_admin, delete_admin_session
 from converter import extract_text_from_pdf_bytes
-from db import get_db, get_db_session
+from db import get_db
 from emailer import send_email
 import file_storage
 from models import JobApplication, JobApplicationAIEvaluation, JobBoard, JobPost
@@ -36,15 +36,13 @@ async def me(req: Request):
 
 @app.get("/api/job-boards")
 async def api_job_boards(db: Session = Depends(get_db)):
-    with get_db_session() as session:
-      jobBoards = db.query(JobBoard).all()
-      return jobBoards
+   jobBoards = db.query(JobBoard).all()
+   return jobBoards
 
 @app.get("/api/job-application-ai-evaluations")
-async def api_job_boards():
-    with get_db_session() as session:
-       results = session.query(JobApplicationAIEvaluation).all()
-       return results
+async def api_job_boards(db: Session = Depends(get_db)):
+   results = db.query(JobApplicationAIEvaluation).all()
+   return results
     
 class JobBoardForm(BaseModel):
    slug : str = Field(..., min_length=2, max_length=20)
@@ -64,58 +62,53 @@ if not settings.PRODUCTION:
    app.mount("/uploads", StaticFiles(directory="uploads"))
 
 @app.get("/api/job-boards/{job_board_id}/job-posts")
-async def api_company_job_board_posts(job_board_id):
-  with get_db_session() as session:
-     jobPosts = session.query(JobPost).filter(JobPost.job_board_id.__eq__(job_board_id)).all()
-     return jobPosts
+async def api_company_job_board_posts(job_board_id, db: Session = Depends(get_db)):
+   jobPosts = db.query(JobPost).filter(JobPost.job_board_id.__eq__(job_board_id)).all()
+   return jobPosts
 
 @app.get("/api/job-boards/{job_board_id}")
-async def api_get_company_job_board(job_board_id):
-  with get_db_session() as session:
-     jobBoard = session.get(JobBoard, job_board_id)
-     if not jobBoard:
-        raise HTTPException(status_code=404)
-     return jobBoard
+async def api_get_company_job_board(job_board_id, db: Session = Depends(get_db)):
+   jobBoard = db.get(JobBoard, job_board_id)
+   if not jobBoard:
+      raise HTTPException(status_code=404)
+   return jobBoard
 
 @app.delete("/api/job-boards/{job_board_id}")
-async def api_get_company_job_board(job_board_id):
-  with get_db_session() as session:
-     jobBoard = session.get(JobBoard, job_board_id)
-     if not jobBoard:
-        raise HTTPException(status_code=404)
-     session.delete(jobBoard)
-     session.commit()
-     return jobBoard
+async def api_get_company_job_board(job_board_id, db: Session = Depends(get_db)):
+   jobBoard = db.get(JobBoard, job_board_id)
+   if not jobBoard:
+      raise HTTPException(status_code=404)
+   db.delete(jobBoard)
+   db.commit()
+   return jobBoard
   
 class JobBoardEditForm(BaseModel):
    slug : str = Field(..., min_length=2, max_length=20)
    logo: Optional[UploadFile] = None
 
 @app.put("/api/job-boards/{job_board_id}")
-async def api_get_company_job_board(job_board_id, job_board_edit_form: Annotated[JobBoardEditForm, Form()]):
-  with get_db_session() as session:
-     jobBoard = session.get(JobBoard, job_board_id)
-     if not jobBoard:
-        raise HTTPException(status_code=404)
-     jobBoard.slug = job_board_edit_form.slug
-     if job_board_edit_form.logo is not None and job_board_edit_form.logo.filename != '':
-        logo_contents = await job_board_edit_form.logo.read()
-        file_url = file_storage.upload_file("company-logos", job_board_edit_form.logo.filename, logo_contents, job_board_edit_form.logo.content_type)
-        jobBoard.logo_url = file_url
-     session.add(jobBoard)
-     session.commit()
-     return jobBoard
+async def api_get_company_job_board(job_board_id, job_board_edit_form: Annotated[JobBoardEditForm, Form()], db: Session = Depends(get_db)):
+   jobBoard = db.get(JobBoard, job_board_id)
+   if not jobBoard:
+      raise HTTPException(status_code=404)
+   jobBoard.slug = job_board_edit_form.slug
+   if job_board_edit_form.logo is not None and job_board_edit_form.logo.filename != '':
+      logo_contents = await job_board_edit_form.logo.read()
+      file_url = file_storage.upload_file("company-logos", job_board_edit_form.logo.filename, logo_contents, job_board_edit_form.logo.content_type)
+      jobBoard.logo_url = file_url
+   db.add(jobBoard)
+   db.commit()
+   return jobBoard
 
 @app.post("/api/job-posts/{job_post_id}/close")
-async def api_close_job_post(job_post_id):
-  with get_db_session() as session:
-     jobPost = session.get(JobPost, job_post_id)
-     if not jobPost:
-        raise HTTPException(status_code=404)
-     jobPost.is_open = False
-     session.add(jobPost)
-     session.commit()
-     return jobPost
+async def api_close_job_post(job_post_id, db: Session = Depends(get_db)):
+   jobPost = db.get(JobPost, job_post_id)
+   if not jobPost:
+      raise HTTPException(status_code=404)
+   jobPost.is_open = False
+   db.add(jobPost)
+   db.commit()
+   return jobPost
   
 class JobPostForm(BaseModel):
    title : str
@@ -123,27 +116,25 @@ class JobPostForm(BaseModel):
    job_board_id : int
 
 @app.post("/api/job-posts")
-async def api_create_job_post(job_post_form: Annotated[JobPostForm, Form()]):
-  with get_db_session() as session:
-     jobBoard = session.get(JobBoard, job_post_form.job_board_id)
-     if not jobBoard:
-        raise HTTPException(status_code=400)
-     jobPost = JobPost(title=job_post_form.title, 
-                       description=job_post_form.description, 
-                       job_board_id = job_post_form.job_board_id)
-     session.add(jobPost)
-     session.commit()
-     session.refresh(jobPost)
-     return jobPost
+async def api_create_job_post(job_post_form: Annotated[JobPostForm, Form()], db: Session = Depends(get_db)):
+   jobBoard = db.get(JobBoard, job_post_form.job_board_id)
+   if not jobBoard:
+      raise HTTPException(status_code=400)
+   jobPost = JobPost(title=job_post_form.title, 
+                     description=job_post_form.description, 
+                     job_board_id = job_post_form.job_board_id)
+   db.add(jobPost)
+   db.commit()
+   db.refresh(jobPost)
+   return jobPost
 
 @app.get("/api/job-boards/{slug}")
-async def api_company_job_board(slug):
-  with get_db_session() as session:
-     jobPosts = session.query(JobPost) \
-        .join(JobPost.job_board) \
-        .filter(JobBoard.slug.__eq__(slug)) \
-        .all()
-     return jobPosts
+async def api_company_job_board(slug, db: Session = Depends(get_db)):
+   jobPosts = db.query(JobPost) \
+      .join(JobPost.job_board) \
+      .filter(JobBoard.slug.__eq__(slug)) \
+      .all()
+   return jobPosts
   
 
 class JobApplicationForm(BaseModel):
@@ -153,46 +144,46 @@ class JobApplicationForm(BaseModel):
    job_post_id : int
    resume: UploadFile = File(...)
 
-def evaluate_resume(resume_content, job_post_description, job_application_id):
+def evaluate_resume(resume_content, job_post_description, job_application_id, db: Session = Depends(get_db)):
    resume_raw_text = extract_text_from_pdf_bytes(resume_content)
    ai_evaluation = evaluate_resume_with_ai(resume_raw_text, job_post_description)
-   with get_db_session() as session:
-      evaluation = JobApplicationAIEvaluation(
-         job_application_id = job_application_id,
-         overall_score = ai_evaluation["overall_score"],
-         evaluation = ai_evaluation
-      )
-      session.add(evaluation)
-      session.commit()
+   evaluation = JobApplicationAIEvaluation(
+      job_application_id = job_application_id,
+      overall_score = ai_evaluation["overall_score"],
+      evaluation = ai_evaluation
+   )
+   db.add(evaluation)
+   db.commit()
 
 @app.post("/api/job-applications")
-async def api_create_new_job_application(job_application_form: Annotated[JobApplicationForm, Form()], background_tasks: BackgroundTasks):
-   with get_db_session() as session:
-      jobPost = session.get(JobPost, job_application_form.job_post_id)
-      if not jobPost or not jobPost.is_open:
-         raise HTTPException(status_code=400)
-      resume_content = await job_application_form.resume.read()
-      file_url = file_storage.upload_file("resumes", job_application_form.resume.filename, resume_content, job_application_form.resume.content_type)
-      new_job_application = JobApplication(
-         first_name=job_application_form.first_name, 
-         last_name=job_application_form.last_name, 
-         email=job_application_form.email, 
-         job_post_id = job_application_form.job_post_id,
-         resume_url=file_url)
-      session.add(new_job_application)
-      session.commit()
-      session.refresh(new_job_application)
-      background_tasks.add_task(send_email, 
-                              new_job_application.email, 
-                              "Acknowledgement", 
-                              "We have received your job application")
-      
-      background_tasks.add_task(evaluate_resume, resume_content, 
-                                jobPost.description, new_job_application.id)
-      
-      return new_job_application
-  
-app.mount("/assets", StaticFiles(directory="frontend/build/client/assets"))
+async def api_create_new_job_application(job_application_form: Annotated[JobApplicationForm, Form()], background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
+
+   jobPost = db.get(JobPost, job_application_form.job_post_id)
+   if not jobPost or not jobPost.is_open:
+      raise HTTPException(status_code=400)
+   resume_content = await job_application_form.resume.read()
+   file_url = file_storage.upload_file("resumes", job_application_form.resume.filename, resume_content, job_application_form.resume.content_type)
+   new_job_application = JobApplication(
+      first_name=job_application_form.first_name, 
+      last_name=job_application_form.last_name, 
+      email=job_application_form.email, 
+      job_post_id = job_application_form.job_post_id,
+      resume_url=file_url)
+   db.add(new_job_application)
+   db.commit()
+   db.refresh(new_job_application)
+   background_tasks.add_task(send_email, 
+                           new_job_application.email, 
+                           "Acknowledgement", 
+                           "We have received your job application")
+   
+   background_tasks.add_task(evaluate_resume, resume_content, 
+                              jobPost.description, new_job_application.id)
+   
+   return new_job_application
+
+if not settings.IS_CI:
+   app.mount("/assets", StaticFiles(directory="frontend/build/client/assets"))
 
 @app.get("/{full_path:path}")
 async def catch_all(full_path: str):

@@ -20,6 +20,7 @@
           ADMIN_PASSWORD: "test"
           RESEND_API_KEY: "test"
           OPENAI_API_KEY: "test"
+          IS_CI: "true"
         steps:
         - name: Checkout code
           uses: actions/checkout@v4
