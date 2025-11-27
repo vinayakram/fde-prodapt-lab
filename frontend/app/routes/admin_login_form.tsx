@@ -15,9 +15,9 @@ import { Input } from "~/components/ui/input"
 import { Form, redirect } from "react-router"
 import type { Route } from "../+types/root"
 
-export async function clientAction({ context, request}: Route.ClientActionArgs) {
+export async function clientAction({ request}: Route.ClientActionArgs) {
   const formData = await request.formData()
-  const res = await fetch(`/api/admin-login`, {
+  await fetch(`/api/admin-login`, {
     method: 'POST',
     body: formData,
   })
