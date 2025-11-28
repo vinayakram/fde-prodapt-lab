@@ -144,7 +144,7 @@ class JobApplicationForm(BaseModel):
    job_post_id : int
    resume: UploadFile = File(...)
 
-def evaluate_resume(resume_content, job_post_description, job_application_id, db: Session = Depends(get_db)):
+def evaluate_resume(resume_content, job_post_description, job_application_id, db):
    resume_raw_text = extract_text_from_pdf_bytes(resume_content)
    ai_evaluation = evaluate_resume_with_ai(resume_raw_text, job_post_description)
    evaluation = JobApplicationAIEvaluation(
@@ -178,7 +178,7 @@ async def api_create_new_job_application(job_application_form: Annotated[JobAppl
                            "We have received your job application")
    
    background_tasks.add_task(evaluate_resume, resume_content, 
-                              jobPost.description, new_job_application.id)
+                              jobPost.description, new_job_application.id, db)
    
    return new_job_application
 
