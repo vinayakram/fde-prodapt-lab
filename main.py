@@ -4,8 +4,9 @@ from fastapi import BackgroundTasks, Depends, Request, Response, status, FastAPI
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, EmailStr, Field
+from typing import List
 from sqlalchemy import text
-from ai import evaluate_resume_with_ai
+from ai import evaluate_resume_with_ai, review_application
 from auth import AdminAuthzMiddleware, AdminSessionMiddleware, authenticate_admin, delete_admin_session
 from converter import extract_text_from_pdf_bytes
 from db import get_db
@@ -181,6 +182,14 @@ async def api_create_new_job_application(job_application_form: Annotated[JobAppl
                               jobPost.description, new_job_application.id, db)
    
    return new_job_application
+
+class JobDescriptionForm(BaseModel):
+   description: str
+
+@app.post("/api/review-job-description")
+async def api_create_job_post(job_post_form: Annotated[JobDescriptionForm, Form()]):
+   reviewed_application = review_application(job_post_form.description)
+   return reviewed_application
 
 if not settings.IS_CI:
    app.mount("/assets", StaticFiles(directory="frontend/build/client/assets"))
