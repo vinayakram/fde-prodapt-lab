@@ -111,6 +111,8 @@ Analyze the following job description:
 ----------------------
 
 Return only JSON.
+
+{format_instructions}
 """
 
 class RewrittenSection(BaseModel):
@@ -153,6 +155,8 @@ Analysis Findings:
 
 Rewrite ONLY the problematic sections using the schema.
 Return only JSON.
+
+{format_instructions}
 """
 
 FINALISE_SYSTEM_PROMPT = """
@@ -195,7 +199,7 @@ def review_application(job_description: str) -> ReviewedApplication:
     analysis_parser = PydanticOutputParser(pydantic_object=JDAnalysis)
     analysis_prompt = ChatPromptTemplate.from_messages([
         ("system", ANALYSIS_SYSTEM_PROMPT),
-        ("human", ANALYSIS_USER_PROMPT + "\n\n{format_instructions}"),
+        ("human", ANALYSIS_USER_PROMPT),
     ]).partial(format_instructions=analysis_parser.get_format_instructions())
     analysis_chain = analysis_prompt | llm | analysis_parser
     analysis = analysis_chain.invoke({"job_description": job_description})
@@ -203,7 +207,7 @@ def review_application(job_description: str) -> ReviewedApplication:
     rewrite_parser = PydanticOutputParser(pydantic_object=JDRewriteOutput)
     rewrite_prompt = ChatPromptTemplate.from_messages([
         ("system", REWRITE_SYSTEM_PROMPT),
-        ("human", REWRITE_USER_PROMPT + "\n\n{format_instructions}"),
+        ("human", REWRITE_USER_PROMPT),
     ]).partial(format_instructions=rewrite_parser.get_format_instructions())
     rewrite_chain = rewrite_prompt | llm | rewrite_parser
     rewrite = rewrite_chain.invoke({"job_description": job_description, "analysis_json": analysis.json()})
